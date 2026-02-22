@@ -1,0 +1,1053 @@
+<!--
+Tailgate — Sales Training Portal (with Stage 1 Quiz Gating)
+Updated: 2026-02-21
+
+Single-file static portal:
+- 5 stages + unlock logic
+- Quizzes on Stages 1, 2, and 4 only (80% pass)
+- Stage 5 includes training review module
+- “Final Pack” resources always accessible
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tailgate — Training Hub</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Instrument+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --white:#ffffff; --off-white:#f7f8fc; --light:#eef0f7;
+      --blue:#1a3adb; --blue-mid:#2f4ef0; --blue-light:#e8ecff;
+      --red:#e5141f; --red-light:#fff0f0;
+      --dark:#0d0f1a; --gray:#6b7280; --gray-light:#d1d5db;
+      --border:#e5e7ef;
+      --shadow:0 2px 12px rgba(26,58,219,0.08);
+      --shadow-lg:0 8px 40px rgba(26,58,219,0.13);
+      --green:#1a7a4a; --green-light:#e6f7ef;
+      --locked-bg:#f9f9fb;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      background:var(--off-white);
+      color:var(--dark);
+      font-family:'Instrument Sans', sans-serif;
+      font-weight:400;
+      min-height:100vh;
+      overflow-x:hidden;
+    }
+
+    /* Gate overlay */
+    .gate-overlay { position:fixed; inset:0; background:rgba(13,15,26,0.75); backdrop-filter:blur(8px); z-index:300; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .gate-overlay.hidden { display:none; }
+    .gate-card { background:var(--white); border:1.5px solid var(--border); border-radius:22px; padding:40px; width:100%; max-width:420px; box-shadow:0 24px 80px rgba(13,15,26,0.2); animation:modalIn 0.3s cubic-bezier(0.34,1.56,0.64,1); }
+    .gate-eyebrow { font-size:0.72rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue); margin-bottom:10px; }
+    .gate-title { font-family:'Bricolage Grotesque', sans-serif; font-weight:800; font-size:1.7rem; letter-spacing:-0.03em; color:var(--dark); margin-bottom:8px; line-height:1.1; }
+    .gate-sub { font-size:0.88rem; color:var(--gray); line-height:1.6; margin-bottom:28px; }
+    .gate-label { font-size:0.78rem; font-weight:600; color:var(--dark); margin-bottom:8px; display:block; }
+    .gate-input { width:100%; padding:12px 16px; border:1.5px solid var(--border); border-radius:10px; font-family:'Instrument Sans', sans-serif; font-size:0.95rem; color:var(--dark); background:var(--off-white); outline:none; transition:border-color 0.2s, box-shadow 0.2s; margin-bottom:16px; }
+    .gate-input:focus { border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-light); background:var(--white); }
+    .gate-input.error { border-color:var(--red); box-shadow:0 0 0 3px var(--red-light); }
+    .gate-error { font-size:0.78rem; color:var(--red); margin-top:-10px; margin-bottom:14px; display:none; }
+    .gate-error.show { display:block; }
+    .gate-btn { width:100%; padding:13px; background:var(--blue); color:white; border:none; border-radius:10px; font-family:'Instrument Sans', sans-serif; font-size:0.95rem; font-weight:600; cursor:pointer; transition:background 0.18s, transform 0.18s; display:flex; align-items:center; justify-content:center; gap:8px; }
+    .gate-btn:hover { background:var(--blue-mid); }
+    .gate-btn:disabled { opacity:0.6; cursor:not-allowed; }
+    .gate-spinner { width:16px; height:16px; border:2px solid rgba(255,255,255,0.4); border-top-color:white; border-radius:50%; animation:spin 0.7s linear infinite; display:none; }
+    .gate-btn.loading .gate-spinner { display:block; }
+    .gate-btn.loading .gate-btn-text { opacity:0.7; }
+    @keyframes spin { to { transform:rotate(360deg);} }
+
+    /* Nav */
+    nav { position:fixed; top:0; left:0; right:0; z-index:100; display:flex; align-items:center; justify-content:space-between; padding:0 40px; height:64px; background:var(--white); border-bottom:1.5px solid var(--border); }
+    .logo { font-family:'Bricolage Grotesque', sans-serif; font-weight:800; font-size:1.35rem; letter-spacing:-0.04em; color:var(--dark); }
+    .logo span { color:var(--blue); }
+    .nav-right { display:flex; align-items:center; gap:10px; }
+    .nav-email { font-size:0.78rem; font-weight:500; color:var(--gray); background:var(--off-white); border:1.5px solid var(--border); padding:5px 12px; border-radius:20px; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .nav-badge { font-size:0.72rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; color:var(--blue); background:var(--blue-light); padding:5px 12px; border-radius:20px; }
+    .nav-reset { font-size:0.72rem; font-weight:600; color:var(--gray); background:none; border:1.5px solid var(--border); padding:5px 10px; border-radius:20px; cursor:pointer; transition:all 0.15s; }
+    .nav-reset:hover { color:var(--red); border-color:rgba(229,20,31,0.3); }
+    .nav-link { font-size:0.72rem; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--blue); background:var(--blue-light); border:1.5px solid rgba(26,58,219,0.2); padding:6px 10px; border-radius:20px; text-decoration:none; transition:all 0.15s; }
+    .nav-link:hover { background:var(--blue); color:white; }
+
+    /* Module body + resources */
+    .module-body { padding:18px 24px 6px; }
+    .module-body h3 { font-family:'Bricolage Grotesque', sans-serif; font-weight:800; letter-spacing:-0.02em; font-size:1rem; margin-bottom:8px; }
+    .module-body p { font-size:0.9rem; color:var(--gray); line-height:1.7; margin-bottom:10px; }
+    .task-box { background:var(--off-white); border:1.5px solid var(--border); border-radius:14px; padding:14px; }
+    .task-box ul { margin-left:18px; color:var(--dark); }
+    .task-box li { margin:8px 0; line-height:1.5; }
+
+    .resource-links { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+    .resource-link { display:block; padding:14px 14px; border-radius:14px; border:1.5px solid var(--border); background:var(--white); text-decoration:none; color:var(--dark); box-shadow:var(--shadow); transition:transform 0.18s, box-shadow 0.18s, border-color 0.18s; }
+    .resource-link:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); border-color:rgba(26,58,219,0.22); }
+    .resource-link .t { font-weight:800; letter-spacing:-0.02em; font-family:'Bricolage Grotesque', sans-serif; margin-bottom:6px; }
+    .resource-link .s { font-size:0.82rem; color:var(--gray); line-height:1.5; }
+
+    /* Hero */
+    .hero { padding:108px 40px 56px; max-width:1140px; margin:0 auto; display:grid; grid-template-columns:1fr auto; gap:40px; align-items:end; }
+    .hero-eyebrow { display:inline-flex; align-items:center; gap:8px; font-size:0.78rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--red); margin-bottom:18px; }
+    .hero-eyebrow::before { content:''; display:block; width:22px; height:2.5px; background:var(--red); border-radius:2px; }
+    .hero h1 { font-family:'Bricolage Grotesque', sans-serif; font-weight:800; font-size:clamp(2.6rem, 5.5vw, 4.8rem); line-height:1.02; letter-spacing:-0.04em; margin-bottom:20px; color:var(--dark); }
+    .hero h1 .blue { color:var(--blue); } .hero h1 .red { color:var(--red); }
+    .hero p { font-size:1.05rem; color:var(--gray); max-width:480px; line-height:1.7; margin-bottom:32px; }
+    .progress-meta { display:flex; justify-content:space-between; margin-bottom:8px; }
+    .progress-meta span { font-size:0.82rem; font-weight:600; color:var(--gray); }
+    .progress-meta .pct { color:var(--blue); }
+    .progress-track { width:100%; max-width:400px; height:7px; background:var(--light); border-radius:10px; overflow:hidden; border:1px solid var(--border); }
+    .progress-fill { height:100%; width:0%; background:linear-gradient(90deg, var(--blue), var(--blue-mid)); border-radius:10px; transition:width 1s cubic-bezier(0.4,0,0.2,1); }
+    .hero-stats { display:flex; flex-direction:column; gap:10px; }
+    .stat-pill { background:var(--white); border:1.5px solid var(--border); border-radius:14px; padding:14px 20px; text-align:right; box-shadow:var(--shadow); min-width:140px; }
+    .stat-pill .num { font-family:'Bricolage Grotesque', sans-serif; font-weight:800; font-size:1.7rem; letter-spacing:-0.04em; line-height:1; color:var(--blue); margin-bottom:4px; }
+    .stat-pill .num.red { color:var(--red); }
+    .stat-pill .lbl { font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray); }
+
+    /* Sections */
+    .section { max-width:1140px; margin:0 auto; padding:56px 40px; }
+    .divider { height:1.5px; background:var(--border); margin:0 40px; }
+    .section-label { font-size:0.72rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue); margin-bottom:6px; }
+    .section-title { font-family:'Bricolage Grotesque', sans-serif; font-weight:800; font-size:clamp(1.5rem, 2.5vw, 2rem); letter-spacing:-0.03em; color:var(--dark); line-height:1.1; margin-bottom:28px; }
+
+    /* Stage cards */
+    .stages-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(290px, 1fr)); gap:16px; }
+    .stage-card { background:var(--white); border:1.5px solid var(--border); border-radius:18px; padding:26px; transition:box-shadow 0.2s, transform 0.2s, border-color 0.2s; position:relative; }
+    .stage-card:not(.locked):hover { box-shadow:var(--shadow-lg); transform:translateY(-2px); border-color:rgba(26,58,219,0.18); }
+    .stage-card.locked { background:var(--locked-bg); border-color:var(--border); opacity:0.6; cursor:not-allowed; }
+    .stage-card.locked .module-item { pointer-events:none; cursor:not-allowed; }
+    .stage-card.locked .stage-badge { background:var(--light); color:var(--gray); }
+    .lock-banner { display:none; align-items:center; gap:6px; font-size:0.75rem; font-weight:600; color:var(--gray); background:var(--light); border:1.5px solid var(--border); padding:6px 12px; border-radius:8px; margin-bottom:14px; }
+    .stage-card.locked .lock-banner { display:flex; }
+    .stage-card.completed { border-color:rgba(26,58,219,0.25); background:linear-gradient(135deg, #fff 80%, var(--blue-light)); }
+    .stage-card.completed .stage-badge { background:var(--green-light); color:var(--green); }
+    .stage-badge { display:inline-block; font-size:0.68rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; background:var(--blue-light); color:var(--blue); padding:4px 10px; border-radius:20px; margin-bottom:12px; }
+    .stage-title { font-family:'Bricolage Grotesque', sans-serif; font-weight:700; font-size:1.08rem; letter-spacing:-0.02em; margin-bottom:8px; color:var(--dark); line-height:1.3; }
+    .stage-desc { font-size:0.84rem; color:var(--gray); line-height:1.6; margin-bottom:18px; }
+    .stage-modules { display:flex; flex-direction:column; gap:7px; }
+
+    /* Module rows */
+    .module-item { display:flex; align-items:center; gap:10px; font-size:0.83rem; font-weight:500; color:var(--dark); padding:9px 12px; background:var(--off-white); border-radius:10px; border:1.5px solid var(--border); cursor:pointer; transition:all 0.18s ease; }
+    .module-item:hover { background:var(--blue-light); border-color:rgba(26,58,219,0.2); color:var(--blue); }
+    .module-item.done { color:var(--green); background:var(--green-light); border-color:rgba(26,122,74,0.2); }
+    .module-icon { width:22px; height:22px; border-radius:50%; background:var(--blue); color:white; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:9px; padding-left:1px; transition:background 0.18s; }
+    .module-item:hover .module-icon { background:var(--blue-mid); }
+    .module-item.done .module-icon { background:var(--green); padding-left:0; font-size:11px; }
+    .locked .module-icon { background:var(--gray-light); }
+
+  .modal-overlay { position:fixed; inset:0; background:rgba(13,15,26,0.6); backdrop-filter:blur(6px); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
+.modal-overlay.open { display:flex; }
+
+/* Sticky modal layout */
+.modal{
+  background:var(--white);
+  border:1.5px solid var(--border);
+  border-radius:22px;
+  width:100%;
+  max-width:760px;
+  max-height:90vh;
+  overflow:hidden;
+  box-shadow:0 24px 80px rgba(13,15,26,0.2);
+  animation:modalIn 0.28s cubic-bezier(0.34,1.56,0.64,1);
+  display:flex;
+  flex-direction:column;
+}
+
+@keyframes modalIn { from { opacity:0; transform:scale(0.92) translateY(16px);} to { opacity:1; transform:scale(1) translateY(0);} }
+
+.modal-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:20px 24px;
+  border-bottom:1.5px solid var(--border);
+  position:sticky;
+  top:0;
+  z-index:10;
+  background:var(--white);
+}
+
+.modal-stage-tag { font-size:0.7rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--blue); background:var(--blue-light); padding:3px 10px; border-radius:20px; margin-bottom:4px; display:inline-block; }
+.modal-title { font-family:'Bricolage Grotesque', sans-serif; font-weight:700; font-size:1.05rem; letter-spacing:-0.02em; color:var(--dark); }
+
+.modal-close { width:34px; height:34px; border-radius:50%; background:var(--light); border:1.5px solid var(--border); color:var(--gray); font-size:1rem; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.15s; flex-shrink:0; }
+.modal-close:hover { background:var(--red-light); border-color:rgba(229,20,31,0.2); color:var(--red); }
+
+/* The scrolling middle area */
+.modal-scroll{
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+
+/* Sticky footer */
+.modal-footer{
+  padding:16px 24px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  position:sticky;
+  bottom:0;
+  z-index:10;
+  background:var(--white);
+  border-top:1.5px solid var(--border);
+}
+
+    /* Video placeholder */
+    .video-placeholder { aspect-ratio:16/9; background:var(--off-white); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; position:relative; border-bottom:1.5px solid var(--border); overflow:hidden; }
+    .video-bg-pattern { position:absolute; inset:0; background-image:radial-gradient(circle, var(--border) 1px, transparent 1px); background-size:24px 24px; opacity:0.6; }
+    .play-btn { width:64px; height:64px; border-radius:50%; background:var(--blue); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:1.3rem; color:white; position:relative; z-index:1; padding-left:4px; box-shadow:0 8px 32px rgba(26,58,219,0.35); transition:transform 0.18s, box-shadow 0.18s, background 0.18s; }
+    .play-btn:hover { transform:scale(1.08); background:var(--blue-mid); }
+    .video-label { font-size:0.82rem; font-weight:500; color:var(--gray); position:relative; z-index:1; }
+
+    /* Quiz */
+    .quiz { padding:18px 24px; border-bottom:1.5px solid var(--border); background:linear-gradient(180deg,#fff,#fafbff); }
+    .quiz-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .quiz-title { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; letter-spacing:-0.02em; }
+    .quiz-sub { font-size:.8rem; color:var(--gray); }
+    .quiz-form { display:flex; flex-direction:column; gap:12px; }
+    .q { background:var(--off-white); border:1.5px solid var(--border); border-radius:12px; padding:12px; }
+    .q .qtext { font-size:.86rem; font-weight:600; color:var(--dark); margin-bottom:8px; line-height:1.4; }
+    .q .opts { display:flex; flex-direction:column; gap:6px; }
+    .q label { font-size:.84rem; color:var(--dark); display:flex; gap:8px; align-items:flex-start; }
+    .q input[type="text"] { width:100%; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; background:#fff; font-family:'Instrument Sans',sans-serif; }
+    .quiz-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px; }
+    .quiz-score { font-size:.85rem; font-weight:600; color:var(--gray); }
+    .quiz-score.pass { color:var(--green); }
+    .quiz-score.fail { color:var(--red); }
+
+    .modal-footer { padding:16px 24px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    .upload-hint { font-size:0.78rem; color:var(--gray); }
+    .upload-hint strong { color:var(--blue); font-weight:600; }
+    .btn-mark { background:var(--blue); color:white; border:none; padding:10px 22px; border-radius:10px; font-family:'Instrument Sans',sans-serif; font-size:0.85rem; font-weight:600; cursor:pointer; transition:background 0.18s, transform 0.18s; white-space:nowrap; }
+    .btn-mark:hover:not(:disabled) { background:var(--blue-mid); transform:scale(1.02); }
+    .btn-mark.done { background:var(--green); }
+    .btn-mark:disabled { opacity:0.6; cursor:not-allowed; transform:none; }
+
+    /* Footer + toast */
+    footer { max-width:1140px; margin:24px auto 0; padding:32px 40px; display:flex; align-items:center; justify-content:space-between; border-top:1.5px solid var(--border); }
+    .footer-logo { font-family:'Bricolage Grotesque',sans-serif; font-weight:800; font-size:1rem; letter-spacing:-0.03em; color:var(--gray); }
+    .footer-logo span { color:var(--blue); }
+    .footer-text { font-size:0.78rem; color:var(--gray-light); }
+
+    .toast { position:fixed; bottom:28px; left:50%; transform:translateX(-50%) translateY(80px); background:var(--dark); color:white; padding:12px 20px; border-radius:12px; font-size:0.85rem; font-weight:500; box-shadow:0 8px 32px rgba(0,0,0,0.2); z-index:400; transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1); white-space:nowrap; }
+    .toast.show { transform:translateX(-50%) translateY(0); }
+    .toast.success { background:var(--green); }
+    .toast.error { background:var(--red); }
+
+    /* Mobile */
+    @media (max-width:700px) {
+      nav { padding:0 16px; }
+      .nav-email { display:none; }
+      .hero { padding:90px 20px 40px; grid-template-columns:1fr; }
+      .hero-stats { flex-direction:row; }
+      .section { padding:40px 20px; }
+      .divider { margin:0 20px; }
+      footer { padding:24px 20px; flex-direction:column; gap:8px; text-align:center; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="gate-overlay" id="gateOverlay">
+  <div class="gate-card">
+    <div class="gate-eyebrow">🏈 Tailgate Training Hub</div>
+    <div class="gate-title">Welcome to the team.</div>
+    <div class="gate-sub">Enter your work email to get started. We'll load your progress automatically — use the same email you were onboarded with.</div>
+    <label class="gate-label" for="emailInput">Work email</label>
+    <input class="gate-input" type="email" id="emailInput" placeholder="you@tailgate.com" autocomplete="email" />
+    <div class="gate-error" id="gateError">Please enter a valid email address.</div>
+    <button class="gate-btn" id="gateBtn" onclick="submitEmail()">
+      <span class="gate-btn-text">Load My Progress →</span>
+      <div class="gate-spinner"></div>
+    </button>
+  </div>
+</div>
+
+<nav>
+  <div class="logo">Tail<span>gate</span></div>
+  <div class="nav-right">
+    <a class="nav-link" href="#finalPack">Final Pack</a>
+    <div class="nav-email" id="navEmail"></div>
+    <div class="nav-badge">Training</div>
+    <button class="nav-reset" onclick="resetSession()" title="Switch account">↩ Switch</button>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-left">
+    <div class="hero-eyebrow">5-Stage Bootcamp</div>
+    <h1>Close more.<br><span class="blue">Sell</span> <span class="red">smarter.</span></h1>
+    <p>Your onboarding hub for Tailgate's team. Complete each stage to unlock the next — your progress syncs automatically.</p>
+
+    <div class="progress-wrap">
+      <div class="progress-meta">
+        <span id="progressLabel">0 of 16 modules complete</span>
+        <span class="pct" id="progressPct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="globalProgress"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero-stats">
+    <div class="stat-pill"><div class="num">16</div><div class="lbl">Modules</div></div>
+    <div class="stat-pill"><div class="num red">5</div><div class="lbl">Stages</div></div>
+    <div class="stat-pill"><div class="num" id="doneCount">0</div><div class="lbl">Done</div></div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="section">
+  <div class="section-label">Training Program</div>
+  <div class="section-title">5 Stages to Closing</div>
+
+  <div class="stages-grid">
+      
+      <div class="stage-card" id="stage1">
+      <div class="stage-badge">Stage 1</div>
+      <div class="lock-banner">🔒 Complete Stage 1 to unlock</div>
+      <div class="stage-title">Culture, Product & Customers</div>
+      <div class="stage-desc">Tailgate culture + how the NFC system works + how to build trust with different customer types.</div>
+      <div class="stage-modules">
+        <div class="module-item" onclick="openModal('Welcome to Tailgate: Culture & Standards', 'stage1-1', 1)"><div class="module-icon">▶</div> Welcome to Tailgate: Culture & Standards</div>
+        <div class="module-item" onclick="openModal('NFC Intro: How Tailgate Works (Buddy Demo)', 'stage1-2', 1)"><div class="module-icon">▶</div> NFC Intro: How Tailgate Works (Buddy Demo)</div>
+        <div class="module-item" onclick="openModal('Customer Types + Trust', 'stage1-3', 1)"><div class="module-icon">▶</div> Customer Types + Trust</div>
+      </div>
+    </div>
+
+    <div class="stage-card" id="stage2">
+      <div class="stage-badge">Stage 2</div>
+      <div class="lock-banner">🔒 Complete Stage 1 to unlock</div>
+      <div class="stage-title">Daily Workflow + Sales Process</div>
+      <div class="stage-desc">How to run your day, follow the process, and consistently book video appointments.</div>
+      <div class="stage-modules">
+        <div class="module-item" onclick="openModal('Daily Workflow + Best Call Times', 'stage2-1', 2)"><div class="module-icon">▶</div> Daily Workflow + Best Call Times</div>
+        <div class="module-item" onclick="openModal('Sales Process Overview: Call → Follow-Up → Meeting', 'stage2-2', 2)"><div class="module-icon">▶</div> Sales Process Overview</div>
+        <div class="module-item" onclick="openModal('First Cold Call + Email Sequence (Practical)', 'stage2-3', 2)"><div class="module-icon">▶</div> First Cold Call + Email Sequence</div>
+      </div>
+    </div>
+
+    <div class="stage-card" id="stage3">
+      <div class="stage-badge">Stage 3</div>
+      <div class="lock-banner">🔒 Complete Stage 2 to unlock</div>
+      <div class="stage-title">Tools Orientation</div>
+      <div class="stage-desc">Where everything lives, how to join Cliq, and how to run clean re‑engagement follow-ups.</div>
+      <div class="stage-modules">
+        <div class="module-item" onclick="openModal('Find Tools in the Dashboard (Task)', 'stage3-1', 3)"><div class="module-icon">▶</div> Find Tools in the Dashboard (Task)</div>
+        <div class="module-item" onclick="openModal('Join Zoho Cliq (Task)', 'stage3-2', 3)"><div class="module-icon">▶</div> Join Zoho Cliq (Task)</div>
+        <div class="module-item" onclick="openModal('Re‑Engagement Sequences (New Info → Case Study → Exit)', 'stage3-3', 3)"><div class="module-icon">▶</div> Re‑Engagement Sequences</div>
+      </div>
+    </div>
+
+    <div class="stage-card" id="stage4">
+      <div class="stage-badge">Stage 4</div>
+      <div class="lock-banner">🔒 Complete Stage 3 to unlock</div>
+      <div class="stage-title">Skill Practice</div>
+      <div class="stage-desc">Tools discipline, real call breakdown, and objection handling with a consistent framework.</div>
+      <div class="stage-modules">
+        <div class="module-item" onclick="openModal('Using Tools Without Getting Lost', 'stage4-1', 4)"><div class="module-icon">▶</div> Using Tools Without Getting Lost</div>
+        <div class="module-item" onclick="openModal('Real Call Breakdown / Role Play', 'stage4-2', 4)"><div class="module-icon">▶</div> Real Call Breakdown / Role Play</div>
+        <div class="module-item" onclick="openModal('Objections: Acknowledge → One Sentence → Book Time', 'stage4-3', 4)"><div class="module-icon">▶</div> Objections Framework</div>
+      </div>
+    </div>
+
+    <div class="stage-card" id="stage5">
+      <div class="stage-badge">Stage 5</div>
+      <div class="lock-banner">🔒 Complete Stage 4 to unlock</div>
+      <div class="stage-title">Go Live + Rhythm</div>
+      <div class="stage-desc">Your first 30 days, task checklists, and the weekly rhythm that keeps performance consistent.</div>
+      <div class="stage-modules">
+        <div class="module-item" onclick="openModal('Your 30‑Day Targets (Activity + Quality)', 'stage5-1', 5)"><div class="module-icon">▶</div> Your 30‑Day Targets</div>
+        <div class="module-item" onclick="openModal('First Call Checklist (Task)', 'stage5-2', 5)"><div class="module-icon">▶</div> First Call Checklist (Task)</div>
+        <div class="module-item" onclick="openModal('Weekly Rhythm Review (Task)', 'stage5-3', 5)"><div class="module-icon">▶</div> Weekly Rhythm Review (Task)</div>
+        <div class="module-item" onclick="openModal('Training Process Review + Next Steps', 'stage5-4', 5)"><div class="module-icon">▶</div> Training Process Review + Next Steps</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="section" id="finalPack">
+  <div class="section-label">Always Accessible</div>
+  <div class="section-title">Final Pack (Templates + Important Links)</div>
+  <div class="resource-links">
+    <a class="resource-link" href="https://jointailgate.com/training/source/DOCUMENT%201.pdf" target="_blank" rel="noopener">
+      <div class="t">Email Templates</div>
+      <div class="s">Approved outreach templates (email). Keep it short. Always drive to booking the video call.</div>
+    </a>
+    <a class="resource-link" href="https://jointailgate.com/training/source/DOCUMENT2.pdf" target="_blank" rel="noopener">
+      <div class="t">DM/SMS Templates</div>
+      <div class="s">Short texts/DMs for follow-up, re-engagement, confirmations, and breakups.</div>
+    </a>
+    <a class="resource-link" href="https://jointailgate.com/training/source/DOCUMENT3.pdf" target="_blank" rel="noopener">
+      <div class="t">Objection Sheet</div>
+      <div class="s">Acknowledge → 1 sentence → book time. Use this to stay calm and consistent.</div>
+    </a>
+    <a class="resource-link" href="https://jointailgate.com/training/source/DOCUMENT4.pdf" target="_blank" rel="noopener">
+      <div class="t">Important Links</div>
+      <div class="s">Dashboards, booking, and key internal links/resources.</div>
+    </a>
+  </div>
+</div>
+
+<footer>
+  <div class="footer-logo">Tail<span>gate</span></div>
+  <div class="footer-text">Internal use only — Training Hub © 2026</div>
+</footer>
+
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-stage-tag" id="modalStageTag">Stage</div>
+        <div class="modal-title" id="modalTitle">Module Title</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="modal-scroll">
+
+  <div class="video-placeholder">
+    <div class="video-bg-pattern"></div>
+    <button class="play-btn">▶</button>
+    <div class="video-label" id="videoLabel">Replace this with your Loom/YouTube/Vimeo embed later</div>
+  </div>
+
+  <div class="module-body" id="moduleBody"></div>
+
+  <div class="quiz" id="quizWrap">
+    <div class="quiz-head">
+      <div class="quiz-title">Quick Quiz</div>
+      <div class="quiz-sub" id="quizSub">Score 80% to unlock completion.</div>
+    </div>
+    <form id="quizForm" class="quiz-form"></form>
+    <div class="quiz-actions">
+      <button class="btn-mark" type="button" id="quizSubmitBtn" onclick="submitQuiz()">Submit Quiz</button>
+      <div class="quiz-score" id="quizScore"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal-footer">
+      <div class="upload-hint">📎 Tip: Use a <strong>Loom</strong> or <strong>YouTube</strong> unlisted link and embed it above</div>
+      <button class="btn-mark" id="markBtn" onclick="markDone()">Mark Complete ✓</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // Optional: set ZOHO_WEBHOOK_READ if you want to load progress from Zoho.
+  const ZOHO_WEBHOOK_WRITE = 'https://flow.zoho.com/896289513/flow/webhook/incoming?zapikey=1001.f79d11ec0030771e660543a46e1fc3df.c93f972f16a121374e20795f90ae8b8f&isdebug=false';
+  const ZOHO_WEBHOOK_READ = null;
+
+  const STAGE_MODULE_COUNTS = { 1: 3, 2: 3, 3: 3, 4: 3, 5: 4 };
+  const TOTAL_STAGES = 5;
+  const TOTAL_MODULES = Object.values(STAGE_MODULE_COUNTS).reduce((a,b)=>a+b,0);
+
+  const KEY_EMAIL = 'tg_email';
+  const KEY_COMPLETED = 'tg_completed_v3';
+  const KEY_QUIZ_PASSED = 'tg_quiz_passed_v1';
+
+  const QUIZ_PASS_PCT = 80;
+
+  let repEmail = localStorage.getItem(KEY_EMAIL) || '';
+  let completed = new Set(JSON.parse(localStorage.getItem(KEY_COMPLETED) || '[]'));
+  let quizPassed = new Set(JSON.parse(localStorage.getItem(KEY_QUIZ_PASSED) || '[]'));
+  let currentModule = null;
+
+  // Module body content (shows under the video placeholder)
+  const MODULE_BODIES = {
+    "stage1-1": {
+      type: "video",
+      html: `<h3>What this module covers</h3>
+        <p>Tailgate culture, standards, and how we show up: calm, professional, consistent, and honest. We don’t oversell and we don’t cut corners.</p>`
+    },
+    "stage1-2": {
+      type: "video",
+      html: `<h3>Production note (required)</h3>
+        <p><strong>Use Buddy (mascot dog) footage</strong> to demonstrate the NFC tap/QR scan flow. Keep it fun, but keep the explanation clean and consistent.</p>
+        <div class="task-box"><ul>
+          <li>Show the physical card + the phone result (tap or scan).</li>
+          <li>Explain: student orgs raise money + businesses get student visibility.</li>
+          <li>Emphasize: modernized + trackable.</li>
+        </ul></div>`
+    },
+    "stage1-3": {
+      type: "video",
+      html: `<h3>What to remember</h3>
+        <div class="task-box"><ul>
+          <li>Students: ease + trust + clarity.</li>
+          <li>Admins: professionalism + legitimacy + risk clarity.</li>
+          <li>Nonprofits/community: reliability + simple process.</li>
+        </ul></div>`
+    },
+
+    "stage2-1": {
+      type: "video",
+      html: `<h3>Daily workflow</h3>
+        <div class="task-box"><ul>
+          <li>Call blocks + follow-up blocks + booking + clean notes.</li>
+          <li>Best times: businesses/nonprofits (morning), schools/admin (12:30–2), students (after 3pm).</li>
+        </ul></div>`
+    },
+    "stage2-2": {
+      type: "video",
+      html: `<h3>Sales process (simple)</h3>
+        <div class="task-box"><ul>
+          <li>Call → short follow-up → offer times → book in Zoho → confirm.</li>
+          <li>Setters: do not send booking links; do not negotiate program details.</li>
+        </ul></div>`
+    },
+    "stage2-3": {
+      type: "video",
+      html: `<h3>Cold call + email sequence</h3>
+        <div class="task-box"><ul>
+          <li>Keep the call short and aim to schedule the video call.</li>
+          <li>Follow up with time options and a clear next step.</li>
+        </ul></div>`
+    },
+
+    "stage3-1": {
+      type: "task",
+      html: `<h3>Task: Find tools in the dashboard</h3>
+        <p>This is a task module (no quiz). Find where everything lives so you never get lost.</p>
+        <div class="task-box"><ul>
+          <li>Locate leads/tasks area</li>
+          <li>Locate calendar/appointments</li>
+          <li>Locate templates/resources</li>
+          <li>Update your profile info (address/phone/etc.)</li>
+        </ul></div>`
+    },
+    "stage3-2": {
+      type: "task",
+      html: `<h3>Task: Join Zoho Cliq</h3>
+        <p>Install/log in, join the Tailgate workspace, set your profile, and send a quick “Joined” message in the team channel.</p>
+        <div class="task-box"><ul>
+          <li>Install Zoho Cliq (desktop + phone if required)</li>
+          <li>Join workspace + correct channels</li>
+          <li>Set profile name + photo</li>
+          <li>Notifications configured</li>
+        </ul></div>`
+    },
+    "stage3-3": {
+      type: "video",
+      html: `<h3>Re-engagement sequence</h3>
+        <div class="task-box"><ul>
+          <li>New info/value</li>
+          <li>Case study or example</li>
+          <li>Exit message (“Should I close this out?”)</li>
+        </ul></div>`
+    },
+
+    "stage4-1": {
+      type: "video",
+      html: `<h3>Tools discipline</h3>
+        <p>Focus: never getting lost, booking correctly, and leaving clean notes so handoffs are easy.</p>`
+    },
+    "stage4-2": {
+      type: "video",
+      html: `<h3>Role play</h3>
+        <p>We’re practicing calm control: short answers, then back to the booking question.</p>`
+    },
+    "stage4-3": {
+      type: "video",
+      html: `<h3>Objections framework</h3>
+        <div class="task-box"><ul>
+          <li>Acknowledge</li>
+          <li>One-sentence answer</li>
+          <li>Book time (“What day/time works best?”)</li>
+        </ul></div>`
+    },
+
+    "stage5-1": {
+      type: "video",
+      html: `<h3>Your first 30 days</h3>
+        <p>Consistency beats intensity. Activity + clean follow-up + booking + notes.</p>`
+    },
+    "stage5-2": {
+      type: "task",
+      html: `<h3>Task: First Call Checklist</h3>
+        <div class="task-box"><ul>
+          <li>Pre-call prep (tools open, goal clear, time options ready)</li>
+          <li>During call: short + schedule-focused</li>
+          <li>Post-call: log outcome + follow-up + book in Zoho if agreed</li>
+        </ul></div>`
+    },
+    "stage5-3": {
+      type: "task",
+      html: `<h3>Task: Weekly Rhythm Review</h3>
+        <div class="task-box"><ul>
+          <li>Review activity + booked calls + show rate</li>
+          <li>Review top objections + stalls</li>
+          <li>Adjust time blocks + focus skill for next week</li>
+        </ul></div>`
+    },
+    "stage5-4": {
+      type: "video",
+      html: `<h3>Training process review</h3>
+        <p>You can always come back to this hub and the Final Pack. Don’t memorize everything—build the habit of using the resources.</p>
+        <div class="task-box"><ul>
+          <li>Be consistent (workflow)</li>
+          <li>Be clear (process)</li>
+          <li>Be calm (objections)</li>
+          <li>Use Final Pack templates every day</li>
+        </ul></div>`
+    }
+  };
+  
+  // Quizzes for Stages 1, 2, and 4 only (80% pass)
+  const QUIZZES = {
+    // Stage 1
+    "stage1-1": {
+      title: "Welcome to Tailgate: Culture & Standards",
+      questions: [
+        { id: "q1", type: "mc", text: "Tailgate culture emphasizes:", options: ["Speed + professionalism + integrity", "Overpromising to win", "Avoiding follow-up", "Negotiating on the first call"], answer: "Speed + professionalism + integrity" },
+        { id: "q2", type: "tf", text: "We should oversell if it increases short-term conversion.", answer: false },
+        { id: "q3", type: "mc", text: "Early conversations should prioritize:", options: ["Every detail immediately", "Clear next steps and trust", "Arguing objections", "Pricing debates"], answer: "Clear next steps and trust" },
+        { id: "q4", type: "tf", text: "‘Family/camaraderie’ means standards are optional.", answer: false }
+      ]
+    },
+    "stage1-2": {
+      title: "NFC Intro: How Tailgate Works",
+      questions: [
+        { id: "q1", type: "mc", text: "Tailgate connects:", options: ["Student orgs and local businesses", "Students and gyms", "Alumni and universities", "Only nonprofits"], answer: "Student orgs and local businesses" },
+        { id: "q2", type: "mc", text: "The key improvement vs old discount cards is:", options: ["Bigger discounts", "Trackability via NFC/QR + attribution", "Never expiring cards", "No need for any payment"], answer: "Trackability via NFC/QR + attribution" },
+        { id: "q3", type: "tf", text: "Our explanation should be consistent across the company.", answer: true },
+        { id: "q4", type: "mc", text: "A supporter typically starts by:", options: ["Tapping/scanning the card", "Negotiating price", "Calling support", "Filling out a contract"], answer: "Tapping/scanning the card" }
+      ]
+    },
+    "stage1-3": {
+      title: "Customer Types + Trust",
+      questions: [
+        { id: "q1", type: "mc", text: "Students most respond to:", options: ["Ease + trust + clarity", "Complex legal detail", "Long contracts", "Hype only"], answer: "Ease + trust + clarity" },
+        { id: "q2", type: "mc", text: "Admins care most about:", options: ["Memes", "Professionalism + legitimacy + risk clarity", "Avoiding written info", "Only student language"], answer: "Professionalism + legitimacy + risk clarity" },
+        { id: "q3", type: "tf", text: "The core message stays consistent, but tone can change by audience.", answer: true }
+      ]
+    },
+
+    // Stage 2
+    "stage2-1": {
+      title: "Daily Workflow + Best Call Times",
+      questions: [
+        { id: "q1", type: "mc", text: "A strong daily workflow includes:", options: ["Calls + follow-ups + booking + notes", "Only texting", "Only research", "Only meetings"], answer: "Calls + follow-ups + booking + notes" },
+        { id: "q2", type: "mc", text: "Students are often easiest to reach:", options: ["Before 9am", "After 3pm", "Only weekends", "Only lunch"], answer: "After 3pm" },
+        { id: "q3", type: "tf", text: "High activity means notes aren’t important.", answer: false },
+        { id: "q4", type: "mc", text: "Schools/admin can be reachable:", options: ["12:30–2pm", "Only midnight", "Never", "Only Sunday"], answer: "12:30–2pm" }
+      ]
+    },
+    "stage2-2": {
+      title: "Sales Process Overview",
+      questions: [
+        { id: "q1", type: "mc", text: "Our primary next step is:", options: ["A scheduled video call", "A long email explanation", "A contract immediately", "A price negotiation"], answer: "A scheduled video call" },
+        { id: "q2", type: "tf", text: "Setters should send booking links.", answer: false },
+        { id: "q3", type: "mc", text: "Best follow-up after a call is:", options: ["Silence", "Short text/email offering times", "A long PDF", "Only a voicemail"], answer: "Short text/email offering times" }
+      ]
+    },
+    "stage2-3": {
+      title: "First Cold Call + Email Sequence",
+      questions: [
+        { id: "q1", type: "mc", text: "A strong cold call is:", options: ["Long and detailed", "Clear, short, and ends with scheduling", "A debate", "A pitch deck read"], answer: "Clear, short, and ends with scheduling" },
+        { id: "q2", type: "tf", text: "If they say ‘maybe later,’ you should still offer times to get it on the calendar.", answer: true },
+        { id: "q3", type: "mc", text: "Follow-up emails should typically:", options: ["Offer time options", "Avoid scheduling", "Ask them to read everything first", "Wait a week"], answer: "Offer time options" }
+      ]
+    },
+
+    // Stage 4
+    "stage4-1": {
+      title: "Using Tools Without Getting Lost",
+      questions: [
+        { id: "q1", type: "tf", text: "The setter’s objective is to explain the full program.", answer: false },
+        { id: "q2", type: "mc", text: "Appointments should be booked:", options: ["Inside Zoho Bookings with complete details", "Outside Zoho", "Only by sending a link", "Only by email"], answer: "Inside Zoho Bookings with complete details" },
+        { id: "q3", type: "mc", text: "Good notes are:", options: ["Optional", "Clear and useful for the next person", "Emotional", "Only for you"], answer: "Clear and useful for the next person" }
+      ]
+    },
+    "stage4-2": {
+      title: "Real Call Breakdown / Role Play",
+      questions: [
+        { id: "q1", type: "mc", text: "The goal of a good call is:", options: ["Book the next step", "Talk longer than them", "Prove you’re right", "Get a yes on everything"], answer: "Book the next step" },
+        { id: "q2", type: "mc", text: "If interrupted, you should:", options: ["Argue", "Answer briefly and return to scheduling", "Hang up", "Change topics"], answer: "Answer briefly and return to scheduling" },
+        { id: "q3", type: "tf", text: "Confidence matters more than being word-perfect.", answer: true }
+      ]
+    },
+    "stage4-3": {
+      title: "Objections Framework",
+      questions: [
+        { id: "q1", type: "mc", text: "Best objection structure is:", options: ["Acknowledge → brief answer → schedule", "Long debate", "Ignore them", "Discount immediately"], answer: "Acknowledge → brief answer → schedule" },
+        { id: "q2", type: "tf", text: "‘Send info’ can still be redirected into offering times for a quick video overview.", answer: true },
+        { id: "q3", type: "mc", text: "‘We already have fundraisers’ should be answered with:", options: ["This replaces everything", "This works alongside what you do", "You’re wrong", "End the call"], answer: "This works alongside what you do" }
+      ]
+    }
+  };
+    function init() {
+    if (repEmail) {
+      showPortal(repEmail);
+      loadProgressFromZoho(repEmail);
+    }
+  }
+
+  function submitEmail() {
+    const input = document.getElementById('emailInput');
+    const val = input.value.trim().toLowerCase();
+    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+    if (!valid) {
+      input.classList.add('error');
+      document.getElementById('gateError').classList.add('show');
+      return;
+    }
+    repEmail = val;
+    localStorage.setItem(KEY_EMAIL, repEmail);
+
+    const btn = document.getElementById('gateBtn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    loadProgressFromZoho(repEmail, () => {
+      btn.classList.remove('loading');
+      btn.disabled = false;
+      showPortal(repEmail);
+    });
+  }
+
+  document.getElementById('emailInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitEmail();
+    document.getElementById('emailInput').classList.remove('error');
+    document.getElementById('gateError').classList.remove('show');
+  });
+
+  function showPortal(email) {
+    document.getElementById('gateOverlay').classList.add('hidden');
+    document.getElementById('navEmail').textContent = email;
+    updateUI();
+    setTimeout(() => {
+      document.getElementById('globalProgress').style.width =
+        Math.round(completed.size / TOTAL_MODULES * 100) + '%';
+    }, 250);
+  }
+
+  function loadProgressFromZoho(email, callback) {
+    if (!ZOHO_WEBHOOK_READ) {
+      if (callback) callback();
+      return;
+    }
+    fetch(ZOHO_WEBHOOK_READ, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data && Array.isArray(data.completed)) {
+          completed = new Set(data.completed);
+          localStorage.setItem(KEY_COMPLETED, JSON.stringify([...completed]));
+        }
+        if (data && Array.isArray(data.quizPassed)) {
+          quizPassed = new Set(data.quizPassed);
+          localStorage.setItem(KEY_QUIZ_PASSED, JSON.stringify([...quizPassed]));
+        }
+        if (callback) callback();
+      })
+      .catch(() => {
+        if (callback) callback();
+      });
+  }
+
+  function resetSession() {
+    if (!confirm('Switch account? Your progress is saved locally (and may be saved in Zoho if enabled).')) return;
+    localStorage.removeItem(KEY_EMAIL);
+    localStorage.removeItem(KEY_COMPLETED);
+    localStorage.removeItem(KEY_QUIZ_PASSED);
+    location.reload();
+  }
+
+  function isStageUnlocked(stageNum) {
+    if (stageNum === 1) return true;
+    const prev = stageNum - 1;
+    const prevCount = STAGE_MODULE_COUNTS[prev] || 0;
+    for (let m = 1; m <= prevCount; m++) {
+      if (!completed.has('stage' + prev + '-' + m)) return false;
+    }
+    return true;
+  }
+
+  function isStageComplete(stageNum) {
+    const count = STAGE_MODULE_COUNTS[stageNum] || 0;
+    for (let m = 1; m <= count; m++) {
+      if (!completed.has('stage' + stageNum + '-' + m)) return false;
+    }
+    return true;
+  }
+
+  function updateUI() {
+    // module done styling
+    document.querySelectorAll('.module-item').forEach(item => {
+      const oc = item.getAttribute('onclick');
+      const match = oc && oc.match(/'([^']+)',\s*'([^']+)',\s*(\d+)/);
+      if (match && completed.has(match[2])) {
+        item.classList.add('done');
+        item.querySelector('.module-icon').textContent = '✓';
+      }
+    });
+
+    // stage lock/completion states
+    for (let s = 1; s <= TOTAL_STAGES; s++) {
+      const card = document.getElementById('stage' + s);
+      const banner = card.querySelector('.lock-banner');
+      const badge = card.querySelector('.stage-badge');
+
+      if (isStageComplete(s)) {
+        card.classList.remove('locked');
+        card.classList.add('completed');
+        badge.textContent = 'Stage ' + s + ' ✓';
+      } else if (isStageUnlocked(s)) {
+        card.classList.remove('locked', 'completed');
+        badge.textContent = 'Stage ' + s;
+      } else {
+        card.classList.add('locked');
+        card.classList.remove('completed');
+        badge.textContent = 'Stage ' + s;
+        if (banner) banner.textContent = '🔒 Complete Stage ' + (s - 1) + ' to unlock';
+      }
+    }
+
+    const done = completed.size;
+    const pct = Math.round(done / TOTAL_MODULES * 100);
+    document.getElementById('globalProgress').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent = done + ' of ' + TOTAL_MODULES + ' modules complete';
+    document.getElementById('progressPct').textContent = pct + '%';
+    document.getElementById('doneCount').textContent = done;
+  }
+
+  function openModal(name, id, stage) {
+    if (!isStageUnlocked(stage)) {
+      showToast('🔒 Complete Stage ' + (stage - 1) + ' first', 'error');
+      return;
+    }
+
+    currentModule = { id, name, stage };
+    document.getElementById('modalTitle').textContent = name;
+    document.getElementById('modalStageTag').textContent = 'Stage ' + stage;
+    document.getElementById('modalOverlay').classList.add('open');
+
+    // Module body + label
+    const body = document.getElementById('moduleBody');
+    const meta = MODULE_BODIES[id];
+    body.innerHTML = meta ? meta.html : '';
+
+    const videoLabel = document.getElementById('videoLabel');
+    if (meta && meta.type === 'task') {
+      videoLabel.textContent = 'Task module — complete the checklist below, then mark complete.';
+    } else {
+      videoLabel.textContent = 'Replace this with your Loom/YouTube/Vimeo embed later';
+    }
+
+    renderQuiz(id);
+
+    const btn = document.getElementById('markBtn');
+    if (completed.has(id)) {
+      btn.textContent = '✓ Already Completed';
+      btn.classList.add('done');
+      btn.disabled = true;
+    } else {
+      const passed = quizPassed.has(id) || !QUIZZES[id];
+      btn.textContent = passed ? 'Mark Complete ✓' : 'Complete Quiz to Unlock';
+      btn.classList.remove('done');
+      btn.disabled = !passed;
+    }
+  }
+   function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('open');
+    currentModule = null;
+  }
+
+  function closeModalOutside(e) {
+    if (e.target === document.getElementById('modalOverlay')) closeModal();
+  }
+
+  function markDone() {
+    if (!currentModule || completed.has(currentModule.id)) return;
+
+    const { id, name, stage } = currentModule;
+
+    // quiz gating only if quiz exists for module
+    if (QUIZZES[id] && !quizPassed.has(id)) {
+      showToast('Pass the quiz first to unlock completion.', 'error');
+      return;
+    }
+
+    completed.add(id);
+    localStorage.setItem(KEY_COMPLETED, JSON.stringify([...completed]));
+    updateUI();
+
+    const btn = document.getElementById('markBtn');
+    btn.textContent = '✓ Already Completed';
+    btn.classList.add('done');
+    btn.disabled = true;
+
+    const justCompletedStage = isStageComplete(stage);
+    sendToZoho({ id, name, stage, justCompletedStage });
+  }
+
+  function sendToZoho({ id, name, stage, justCompletedStage }) {
+    const payload = {
+      email: repEmail,
+      stage: stage,
+      module_id: id,
+      module_name: name,
+      completed_at: new Date().toISOString(),
+      stage_complete: justCompletedStage,
+      completed: [...completed],
+      quizPassed: [...quizPassed]
+    };
+
+    fetch(ZOHO_WEBHOOK_WRITE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+      .then(res => {
+        if (res.ok) {
+          const msg = justCompletedStage
+            ? '🎉 Stage ' + stage + ' complete — synced!'
+            : '✓ Progress synced';
+          showToast(msg, 'success');
+        } else {
+          showToast('⚠ Saved locally — sync failed', 'error');
+        }
+      })
+      .catch(() => {
+        showToast('⚠ Saved locally — check connection', 'error');
+      });
+  }
+
+  function renderQuiz(moduleId) {
+    const wrap = document.getElementById('quizWrap');
+    const form = document.getElementById('quizForm');
+    const score = document.getElementById('quizScore');
+
+    score.textContent = '';
+    score.className = 'quiz-score';
+
+    const quiz = QUIZZES[moduleId];
+    if (!quiz) {
+      wrap.style.display = 'none';
+      return;
+    }
+    wrap.style.display = 'block';
+
+    form.innerHTML = quiz.questions.map((q, idx) => {
+      const n = 'q_' + moduleId + '_' + q.id;
+
+      if (q.type === 'mc') {
+        return '<div class="q"><div class="qtext">' + (idx + 1) + '. ' + escapeHtml(q.text) + '</div><div class="opts">' +
+          q.options.map(opt =>
+            '<label><input type="radio" name="' + escapeAttr(n) + '" value="' + escapeAttr(opt) + '"> <span>' + escapeHtml(opt) + '</span></label>'
+          ).join('') +
+          '</div></div>';
+      }
+
+      if (q.type === 'tf') {
+        return '<div class="q"><div class="qtext">' + (idx + 1) + '. ' + escapeHtml(q.text) + '</div><div class="opts">' +
+          '<label><input type="radio" name="' + escapeAttr(n) + '" value="true"> <span>True</span></label>' +
+          '<label><input type="radio" name="' + escapeAttr(n) + '" value="false"> <span>False</span></label>' +
+          '</div></div>';
+      }
+
+      // short
+      return '<div class="q"><div class="qtext">' + (idx + 1) + '. ' + escapeHtml(q.text) + '</div>' +
+        '<input type="text" name="' + escapeAttr(n) + '" placeholder="Type your answer…">' +
+        '</div>';
+    }).join('');
+  }
+    function submitQuiz() {
+    if (!currentModule) return;
+    const id = currentModule.id;
+    const quiz = QUIZZES[id];
+    if (!quiz) return;
+
+    let correct = 0;
+    const total = quiz.questions.length;
+
+    for (const q of quiz.questions) {
+      const n = 'q_' + id + '_' + q.id;
+
+      const getChecked = () => document.querySelector('[name="' + cssEscape(n) + '"]:checked')?.value;
+      const getText = () => (document.querySelector('[name="' + cssEscape(n) + '"]')?.value || '').trim();
+
+      if (q.type === 'tf') {
+        const val = getChecked();
+        const b = (val === 'true');
+        if (val !== undefined && b === q.answer) correct++;
+        continue;
+      }
+
+      if (q.type === 'mc') {
+        const val = getChecked();
+        if (val === q.answer) correct++;
+        continue;
+      }
+
+      // short (lenient keyword match if provided)
+      const val = getText().toLowerCase();
+      if (!q.answerContains || q.answerContains.length === 0) {
+        if (val.length >= 6) correct++; // basic “answered something”
+        continue;
+      }
+      const keys = q.answerContains.map(s => String(s).toLowerCase());
+      const hits = keys.filter(k => val.includes(k)).length;
+      const threshold = Math.max(1, Math.ceil(keys.length / 2));
+      if (hits >= threshold) correct++;
+    }
+
+    const pct = Math.round((correct / total) * 100);
+    const score = document.getElementById('quizScore');
+    score.textContent = `Score: ${pct}% (${correct}/${total}) — ${pct >= QUIZ_PASS_PCT ? 'PASS' : 'RETRY'}`;
+    score.className = 'quiz-score ' + (pct >= QUIZ_PASS_PCT ? 'pass' : 'fail');
+
+    if (pct >= QUIZ_PASS_PCT) {
+      quizPassed.add(id);
+      localStorage.setItem(KEY_QUIZ_PASSED, JSON.stringify([...quizPassed]));
+
+      const btn = document.getElementById('markBtn');
+      if (!completed.has(id)) {
+        btn.textContent = 'Mark Complete ✓';
+        btn.disabled = false;
+      }
+
+      showToast('✅ Quiz passed — you can mark this module complete.', 'success');
+    } else {
+      showToast('❌ Quiz not passed — try again.', 'error');
+    }
+  }
+
+  function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast show ' + (type || '');
+    clearTimeout(window.__tg_toast);
+    window.__tg_toast = setTimeout(() => {
+      t.className = 'toast';
+    }, 2400);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escapeAttr(s) {
+    return escapeHtml(s).replace(/`/g, '&#96;');
+  }
+  function cssEscape(s) {
+    // safe enough for our generated names
+    return String(s).replace(/"/g, '\\"');
+  }
+
+  // Boot
+  init();
+</script>
+</body>
+</html>
